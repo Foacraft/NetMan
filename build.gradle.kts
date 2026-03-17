@@ -10,3 +10,19 @@ allprojects {
         mavenCentral()
     }
 }
+
+tasks.register<Copy>("copyArtifacts") {
+    dependsOn(":plugin:shadowJar", ":agent:jar")
+
+    from(project(":plugin").tasks.named("shadowJar")) {
+        rename { "netman-${project.version}.jar" }
+    }
+    from(project(":agent").tasks.named("jar")) {
+        rename { "netman-agent-${project.version}.jar" }
+    }
+    into(layout.buildDirectory)
+}
+
+tasks.register("build") {
+    dependsOn("copyArtifacts")
+}

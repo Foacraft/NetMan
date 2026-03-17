@@ -11,11 +11,13 @@ Real-time network traffic analysis and packet attribution for Paper servers.
    ./gradlew build
    ```
 
-2. Place `agent/build/libs/agent-1.0.0.jar` on the server, and `plugin/build/libs/plugin-1.0.0.jar` in `plugins/`.
+2. 构建产物位于 `build/` 目录：`netman-<version>.jar`（插件）和 `netman-agent-<version>.jar`（Agent）。
 
-3. Start the server with the agent:
+3. 将 `netman-agent-<version>.jar` 放在服务器目录，`netman-<version>.jar` 放入 `plugins/`。
+
+4. 启动服务器：
    ```
-   java -javaagent:agent-1.0.0.jar -jar paper.jar
+   java -javaagent:netman-agent-1.0.0.jar -jar paper.jar
    ```
 
 ## Usage
