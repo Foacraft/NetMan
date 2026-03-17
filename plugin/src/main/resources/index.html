@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Network Analyze</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+body {
+  background: #f5f5f7;
+  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+header {
+  background: #fff;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,.05);
+}
+.header-left  { display: flex; align-items: center; gap: 12px; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+h1 { color: #222; font-size: 15px; font-weight: 600; }
+
+.live-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500;
+  color: #16a34a; background: #f0fdf4;
+  border: 1px solid #bbf7d0; border-radius: 10px; padding: 2px 8px;
+}
+.live-badge.dead { color: #dc2626; background: #fef2f2; border-color: #fecaca; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1.5s infinite; }
+.live-badge.dead .live-dot { animation: none; }
+@keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .3 } }
+
+.summary { display: flex; gap: 20px; align-items: center; font-size: 12px; }
+.stat-item { display: flex; align-items: center; gap: 4px; }
+.stat-label { color: #999; }
+.stat-val { font-weight: 600; color: #333; }
+.up   { color: #16a34a; }
+.down { color: #dc2626; }
+.hdr-divider { width: 1px; height: 18px; background: #e0e0e0; }
+
+.btn-stop {
+  background: #fff; color: #dc2626;
+  border: 1px solid #fca5a5; border-radius: 5px;
+  padding: 5px 12px; font-size: 12px; font-family: inherit;
+  cursor: pointer; transition: all .15s;
+}
+.btn-stop:hover { background: #fef2f2; border-color: #f87171; }
+.btn-stop:disabled { opacity: .4; cursor: default; }
+
+/* ── Tabs ── */
+#tabs {
+  display: flex; background: #fff;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 20px; flex-shrink: 0;
+}
+.tab {
+  background: none; border: none; color: #666;
+  padding: 9px 16px; cursor: pointer;
+  font-size: 13px; font-family: inherit;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.tab:hover { color: #333; }
+.tab.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 500; }
+
+/* ── Content area ── */
+#content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  min-height: 0;
+}
+#content.players-mode { padding: 0; overflow: hidden; }
+
+.empty { padding: 60px; text-align: center; color: #bbb; font-size: 14px; }
+
+/* ── All-tab table ── */
+table { width: 100%; border-collapse: collapse; min-width: 720px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+thead tr { background: #f8f8f8; }
+th {
+  padding: 9px 14px; text-align: left;
+  color: #555; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px;
+  white-space: nowrap; border-bottom: 1px solid #eee;
+  user-select: none;
+}
+th.sortable { cursor: pointer; transition: color .15s; }
+th.sortable:hover { color: #111; background: #f0f0f0; }
+th.sorted { color: #2563eb; }
+th.sorted.asc::after  { content: ' ↑'; }
+th.sorted.desc::after { content: ' ↓'; }
+td { padding: 7px 14px; border-bottom: 1px solid #f0f0f0; color: #333; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafafa; }
+.pid   { color: #2563eb; font-weight: 600; font-family: 'JetBrains Mono','Fira Code',monospace,sans-serif; font-size: 12px; }
+.pname { color: #555; font-size: 12px; }
+.val-up   { color: #16a34a; font-weight: 500; }
+.val-down { color: #dc2626; font-weight: 500; }
+.row-expandable { cursor: pointer; }
+.row-expandable:hover td { background: #f5f7ff !important; }
+.expand-arrow { color: #bbb; font-size: 10px; margin-right: 4px; transition: color .15s; }
+.row-expandable:hover .expand-arrow { color: #888; }
+.source-row td { padding: 0 !important; border-bottom: 1px solid #e8eef8 !important; background: #f8f9ff; }
+.source-body { padding: 8px 14px 10px 36px; }
+.source-body table { min-width: 0; box-shadow: none; border-radius: 0; background: transparent; }
+.source-body th { background: transparent; font-size: 10px; padding: 4px 10px; }
+.source-body td { font-size: 11px; padding: 4px 10px; background: transparent !important; border-color: #eef0f8; }
+.source-body tr:last-child td { border-bottom: none; }
+.src-cat  { color: #2563eb; font-weight: 500; }
+.src-plugin-badge {
+  display: inline-block; font-size: 10px; font-weight: 600;
+  background: #eff6ff; color: #1d4ed8;
+  border: 1px solid #93c5fd; border-radius: 3px; padding: 1px 6px;
+}
+.src-cls  { color: #666; font-family: 'JetBrains Mono','Fira Code',monospace,sans-serif; font-size: 10px; }
+.src-bar-wrap { width: 80px; }
+.src-bar  { height: 5px; background: #e0e0e0; border-radius: 3px; overflow: hidden; }
+.src-bar-fill { height: 100%; background: #2563eb; border-radius: 3px; }
+
+/* ── Players split layout ── */
+.players-layout {
+  display: flex;
+  height: 100%;
+}
+
+.player-list {
+  width: 240px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #e8e8e8;
+  background: #fafafa;
+}
+.player-list-header {
+  padding: 8px 14px 6px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .5px; color: #999;
+  border-bottom: 1px solid #ececec;
+  background: #f5f5f5;
+  position: sticky; top: 0;
+}
+.player-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #ececec;
+  border-left: 3px solid transparent;
+  transition: background .1s;
+}
+.player-item:hover { background: #f0f0f0; }
+.player-item.active { background: #eff6ff; border-left-color: #2563eb; }
+.player-item.offline { opacity: .55; }
+.pi-name {
+  font-size: 13px; font-weight: 500; color: #222;
+  margin-bottom: 5px;
+  display: flex; align-items: center; gap: 6px;
+}
+.pi-offline-tag {
+  font-size: 10px; color: #aaa; font-weight: 400;
+  background: #eee; border-radius: 3px; padding: 1px 5px;
+}
+.pi-bps  { display: flex; gap: 10px; font-size: 11px; margin-bottom: 2px; }
+.pi-tot  { display: flex; gap: 10px; font-size: 11px; color: #aaa; }
+.pi-ping { display: inline-block; font-size: 10px; font-weight: 600; border-radius: 3px; padding: 1px 6px; border: 1px solid; margin-top: 4px; }
+.pi-ping.ok     { color: #15803d; background: #f0fdf4; border-color: #86efac; }
+.pi-ping.fair   { color: #b45309; background: #fffbeb; border-color: #fcd34d; }
+.pi-ping.bad    { color: #b91c1c; background: #fef2f2; border-color: #fca5a5; }
+.pi-ping.na     { color: #aaa;    background: #f5f5f5; border-color: #e0e0e0; }
+
+.player-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px;
+  min-width: 0;
+}
+.player-detail-header {
+  font-size: 13px; font-weight: 600; color: #333;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+/* ── Netty pressure ── */
+.pi-pressure { margin-top: 5px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.pressure-badge {
+  font-size: 10px; font-weight: 500; border-radius: 3px;
+  padding: 1px 6px; border: 1px solid;
+}
+.pressure-badge.ok     { color: #15803d; background: #f0fdf4; border-color: #86efac; }
+.pressure-badge.warn   { color: #b45309; background: #fffbeb; border-color: #fcd34d; }
+.pressure-badge.danger { color: #b91c1c; background: #fef2f2; border-color: #fca5a5; }
+
+.pressure-unwritable {
+  font-size: 10px; color: #dc2626; font-weight: 500;
+}
+
+.detail-pressure {
+  display: flex; gap: 20px; flex-wrap: wrap;
+  font-size: 11px; color: #555;
+  margin-bottom: 10px; padding: 8px 12px;
+  background: #f8f8f8; border-radius: 5px;
+  border: 1px solid #eee;
+}
+.detail-pressure .dp-item { display: flex; flex-direction: column; gap: 2px; }
+.detail-pressure .dp-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: .4px; }
+.detail-pressure .dp-val   { font-weight: 600; color: #222; }
+.detail-pressure .dp-val.ok     { color: #15803d; }
+.detail-pressure .dp-val.warn   { color: #b45309; }
+.detail-pressure .dp-val.danger { color: #b91c1c; }
+
+.evtq-badge {
+  font-size: 11px; font-weight: 600;
+  padding: 1px 7px; border-radius: 4px; border: 1px solid;
+}
+.evtq-badge.ok     { color: #15803d; background: #f0fdf4; border-color: #86efac; }
+.evtq-badge.warn   { color: #b45309; background: #fffbeb; border-color: #fcd34d; }
+.evtq-badge.danger { color: #b91c1c; background: #fef2f2; border-color: #fca5a5; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Network Analyze</h1>
+    <div class="live-badge" id="live-badge">
+      <div class="live-dot"></div>
+      <span id="live-text">Live</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="summary">
+      <div class="stat-item">
+        <span class="stat-label up">▲</span>
+        <span class="stat-val up" id="bpsOut">--</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label down">▼</span>
+        <span class="stat-val down" id="bpsIn">--</span>
+      </div>
+      <div class="hdr-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">Total ▲</span>
+        <span class="stat-val" id="totOut">--</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Total ▼</span>
+        <span class="stat-val" id="totIn">--</span>
+      </div>
+      <div class="hdr-divider"></div>
+      <div class="stat-item" title="EventLoop max queue depth">
+        <span class="stat-label">ELQ</span>
+        <span class="evtq-badge ok" id="evtq-badge">0</span>
+      </div>
+    </div>
+    <button class="btn-stop" id="stop-btn" onclick="requestStop()">■ Stop</button>
+  </div>
+</header>
+
+<div id="tabs">
+  <button class="tab active" onclick="setTab('all')">All</button>
+  <button class="tab" id="tab-players" onclick="setTab('players')">Players</button>
+  <button class="tab" id="tab-plugins" onclick="setTab('plugins')">Plugins</button>
+</div>
+
+<div id="content"><div class="empty">Waiting for data…</div></div>
+
+<script>
+var S = { tab: 'all', player: null, plugin: null, sort: 'bpsOut', dir: 'desc', data: null, errCount: 0, expanded: {} };
+
+function fmtBytes(b) {
+  if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+  if (b >= 1048576)    return (b / 1048576).toFixed(2)    + ' MB';
+  if (b >= 1024)       return (b / 1024).toFixed(2)       + ' KB';
+  return b + ' B';
+}
+function fmtBps(b) {
+  if (b >= 1048576) return (b / 1048576).toFixed(2) + ' Mbps';
+  if (b >= 1024)    return (b / 1024).toFixed(2)    + ' Kbps';
+  return b + ' bps';
+}
+function fmtHex(id) {
+  var h = id.toString(16).toUpperCase();
+  return '0x' + (h.length < 2 ? '0' + h : h);
+}
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+}
+
+// ── Stop button ──────────────────────────────────────────────────────────────
+function requestStop() {
+  var btn = document.getElementById('stop-btn');
+  if (btn.dataset.confirm === '1') {
+    btn.disabled = true;
+    btn.textContent = 'Stopping…';
+    fetch('/api/stop', { method: 'POST' }).catch(function() {});
+    return;
+  }
+  btn.dataset.confirm = '1';
+  btn.textContent = 'Confirm Stop?';
+  btn.style.background = '#fef2f2';
+  setTimeout(function() {
+    if (btn.dataset.confirm === '1') {
+      btn.dataset.confirm = '0';
+      btn.textContent = '■ Stop';
+      btn.style.background = '';
+    }
+  }, 3000);
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function poll() {
+  fetch('/api/stats')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      S.data = d;
+      S.errCount = 0;
+      document.getElementById('live-badge').className = 'live-badge';
+      document.getElementById('live-text').textContent = 'Live';
+      render();
+    })
+    .catch(function() {
+      S.errCount++;
+      if (S.errCount >= 3) {
+        document.getElementById('live-badge').className = 'live-badge dead';
+        document.getElementById('live-text').textContent = 'Offline';
+      }
+    });
+  setTimeout(poll, 1000);
+}
+
+// ── Tab / sort ────────────────────────────────────────────────────────────────
+function setTab(t) {
+  S.tab = t;
+  if (t === 'players' && S.data && S.data.players.length > 0 && !S.player) {
+    S.player = S.data.players[0].name;
+  }
+  if (t === 'plugins' && S.data && S.data.plugins && S.data.plugins.length > 0 && !S.plugin) {
+    S.plugin = S.data.plugins[0].name;
+  }
+  render();
+}
+
+function setPlayer(name) {
+  S.player = name;
+  render();
+}
+
+function toggleExpand(id) {
+  S.expanded[id] = !S.expanded[id];
+  var row = document.getElementById('src-' + id);
+  if (row) row.style.display = S.expanded[id] ? 'table-row' : 'none';
+  var arrow = document.getElementById('arr-' + id);
+  if (arrow) arrow.textContent = S.expanded[id] ? '▼' : '▶';
+}
+
+function setSort(key) {
+  if (S.sort === key) { S.dir = S.dir === 'asc' ? 'desc' : 'asc'; }
+  else { S.sort = key; S.dir = 'desc'; }
+  render();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render() {
+  if (!S.data) return;
+  var d = S.data;
+
+  document.getElementById('bpsOut').textContent = fmtBps(d.total.bpsOut);
+  document.getElementById('bpsIn').textContent  = fmtBps(d.total.bpsIn);
+  document.getElementById('totOut').textContent = fmtBytes(d.total.bytesOut);
+  document.getElementById('totIn').textContent  = fmtBytes(d.total.bytesIn);
+
+  var eq = d.eventLoopMaxQueue || 0;
+  var eqEl = document.getElementById('evtq-badge');
+  eqEl.textContent = eq;
+  eqEl.className = 'evtq-badge ' + (eq < 100 ? 'ok' : eq < 500 ? 'warn' : 'danger');
+
+  document.querySelector('#tabs .tab:first-child').className = 'tab' + (S.tab === 'all' ? ' active' : '');
+  var plTab = document.getElementById('tab-players');
+  plTab.className  = 'tab' + (S.tab === 'players' ? ' active' : '');
+  var plgTab = document.getElementById('tab-plugins');
+  if (plgTab) plgTab.className = 'tab' + (S.tab === 'plugins' ? ' active' : '');
+  var onlineCnt = 0;
+  for (var _i = 0; _i < d.players.length; _i++) { if (d.players[_i].online) onlineCnt++; }
+  plTab.textContent = 'Players (' + onlineCnt + '/' + d.players.length + ')';
+
+  var contentEl = document.getElementById('content');
+  if (S.tab === 'all') {
+    contentEl.className = '';
+    contentEl.innerHTML = buildTableHtml(d.packets);
+  } else if (S.tab === 'players') {
+    contentEl.className = 'players-mode';
+    renderPlayersView(d.players, contentEl);
+  } else if (S.tab === 'plugins') {
+    contentEl.className = 'players-mode';
+    renderPluginsView(d.plugins || [], contentEl);
+  }
+}
+
+// ── Players split view ────────────────────────────────────────────────────────
+function renderPlayersView(players, contentEl) {
+  if (players.length === 0) {
+    contentEl.innerHTML = '<div class="empty">No players captured yet.</div>';
+    return;
+  }
+
+  // Sort: online first, then offline
+  var sorted = players.slice().sort(function(a, b) {
+    if (a.online === b.online) return 0;
+    return a.online ? -1 : 1;
+  });
+
+  // Ensure a valid player is selected
+  var validPlayer = false;
+  for (var i = 0; i < sorted.length; i++) {
+    if (sorted[i].name === S.player) { validPlayer = true; break; }
+  }
+  if (!validPlayer) S.player = sorted[0].name;
+
+  // Ensure the split layout shell exists (created once, never destroyed)
+  var listEl   = contentEl.querySelector('.player-list');
+  var detailEl = contentEl.querySelector('.player-detail');
+  if (!listEl || !detailEl) {
+    contentEl.innerHTML = '<div class="players-layout">'
+      + '<div class="player-list"></div>'
+      + '<div class="player-detail"></div>'
+      + '</div>';
+    listEl   = contentEl.querySelector('.player-list');
+    detailEl = contentEl.querySelector('.player-detail');
+  }
+
+  // Left: player list — update in place to preserve scrollTop
+  var leftHtml = '<div class="player-list-header">Players</div>';
+  sorted.forEach(function(p) {
+    var cls = 'player-item' + (p.name === S.player ? ' active' : '') + (p.online ? '' : ' offline');
+    var ping = p.ping != null ? p.ping : -1;
+    var pingCls = !p.online || ping < 0 ? 'na' : ping < 80 ? 'ok' : ping < 200 ? 'fair' : 'bad';
+    var pingLabel = !p.online || ping < 0 ? 'N/A' : ping + ' ms';
+    var pr = p.pressure || {};
+    var pb = pr.pendingBytes || 0;
+    var pbCls = pb < 65536 ? 'ok' : pb < 524288 ? 'warn' : 'danger';
+    var uwEvt = pr.unwritableEvents || 0;
+    var notWritable = pr.isWritable === false;
+    var pressureHtml = '<div class="pi-pressure">'
+      + '<span class="pressure-badge ' + pbCls + '">' + fmtBytes(pb) + ' pending</span>'
+      + (notWritable ? '<span class="pressure-unwritable">⚠ unwritable</span>' : '')
+      + (uwEvt > 0 ? '<span class="pressure-unwritable">✕' + uwEvt + ' blocked/s</span>' : '')
+      + '</div>';
+    leftHtml += '<div class="' + cls + '" onclick="setPlayer(\'' + esc(p.name) + '\')">'
+      + '<div class="pi-name">' + esc(p.name)
+        + (p.online ? '' : '<span class="pi-offline-tag">offline</span>')
+        + '<span class="pi-ping ' + pingCls + '">' + pingLabel + '</span></div>'
+      + '<div class="pi-bps">'
+        + '<span class="up">▲ ' + fmtBps(p.bpsOut) + '</span>'
+        + '<span class="down">▼ ' + fmtBps(p.bpsIn) + '</span>'
+      + '</div>'
+      + '<div class="pi-tot">'
+        + '<span>▲ ' + fmtBytes(p.bytesOut) + '</span>'
+        + '<span>▼ ' + fmtBytes(p.bytesIn) + '</span>'
+      + '</div>'
+      + pressureHtml
+      + '</div>';
+  });
+  listEl.innerHTML = leftHtml;
+
+  // Right: packet table — update in place to preserve scrollTop
+  var selectedPlayer = null;
+  for (var j = 0; j < sorted.length; j++) {
+    if (sorted[j].name === S.player) { selectedPlayer = sorted[j]; break; }
+  }
+  var spr = selectedPlayer ? (selectedPlayer.pressure || {}) : {};
+  var spb  = spr.pendingBytes || 0;
+  var spk  = spr.peakBytes    || 0;
+  var spbCls = spb < 65536 ? 'ok' : spb < 524288 ? 'warn' : 'danger';
+  var spkCls = spk < 65536 ? 'ok' : spk < 524288 ? 'warn' : 'danger';
+  var detailPressure = '<div class="detail-pressure">'
+    + '<div class="dp-item"><span class="dp-label">Pending Write</span><span class="dp-val ' + spbCls + '">' + fmtBytes(spb) + '</span></div>'
+    + '<div class="dp-item"><span class="dp-label">Peak/s</span><span class="dp-val ' + spkCls + '">' + fmtBytes(spk) + '</span></div>'
+    + '<div class="dp-item"><span class="dp-label">Writable</span><span class="dp-val ' + (spr.isWritable !== false ? 'ok' : 'danger') + '">' + (spr.isWritable !== false ? 'Yes' : 'No') + '</span></div>'
+    + '<div class="dp-item"><span class="dp-label">Blocked/s</span><span class="dp-val ' + ((spr.unwritableEvents || 0) > 0 ? 'warn' : 'ok') + '">' + (spr.unwritableEvents || 0) + '</span></div>'
+    + '</div>';
+  // Build global source map so player packet rows can show expandable source attribution
+  var globalSrcMap = {};
+  if (S.data && S.data.packets) {
+    for (var gsi = 0; gsi < S.data.packets.length; gsi++) {
+      if (S.data.packets[gsi].sources) globalSrcMap[S.data.packets[gsi].id] = S.data.packets[gsi].sources;
+    }
+  }
+  detailEl.innerHTML = '<div class="player-detail-header">'
+    + esc(S.player) + ' — Packet Detail</div>'
+    + detailPressure
+    + buildTableHtml(selectedPlayer ? selectedPlayer.packets : [], globalSrcMap);
+}
+
+// ── Packet name maps (MC 1.20.1 / protocol 763) ───────────────────────────────
+var S2C = {
+  0x00:'BundleDelimiter',       0x01:'SpawnEntity',            0x02:'SpawnExperienceOrb',
+  0x03:'SpawnPlayer',           0x04:'EntityAnimation',        0x05:'AwardStatistics',
+  0x06:'AcknowledgeBlockChange',0x07:'SetBlockDestroyStage',   0x08:'BlockEntityData',
+  0x09:'BlockAction',           0x0A:'BlockUpdate',            0x0B:'BossBar',
+  0x0C:'ChangeDifficulty',      0x0D:'ChunkBiomes',            0x0E:'ClearTitles',
+  0x0F:'CommandSuggestionsResponse',0x10:'Commands',           0x11:'CloseContainer',
+  0x12:'SetContainerContent',   0x13:'SetContainerProperty',   0x14:'SetContainerSlot',
+  0x15:'SetCooldown',           0x16:'ChatSuggestions',        0x17:'PluginMessage',
+  0x18:'DamageEvent',           0x19:'DeleteMessage',          0x1A:'Disconnect',
+  0x1B:'DisguisedChatMessage',  0x1C:'EntityEvent',            0x1D:'Explosion',
+  0x1E:'UnloadChunk',           0x1F:'GameEvent',              0x20:'OpenHorseScreen',
+  0x21:'HurtAnimation',         0x22:'InitializeWorldBorder',  0x23:'KeepAlive',
+  0x24:'ChunkDataAndUpdateLight',0x25:'WorldEvent',            0x26:'Particle',
+  0x27:'UpdateLight',           0x28:'LoginPlay',              0x29:'MapData',
+  0x2A:'MerchantOffers',        0x2B:'UpdateEntityPosition',   0x2C:'UpdateEntityPositionAndRotation',
+  0x2D:'UpdateEntityRotation',  0x2E:'MoveVehicle',            0x2F:'OpenBook',
+  0x30:'OpenScreen',            0x31:'OpenSignEditor',         0x32:'Ping',
+  0x33:'PlaceGhostRecipe',      0x34:'PlayerAbilities',        0x35:'PlayerChatMessage',
+  0x36:'EndCombat',             0x37:'EnterCombat',            0x38:'CombatDeath',
+  0x39:'PlayerInfoRemove',      0x3A:'PlayerInfoUpdate',       0x3B:'LookAt',
+  0x3C:'SynchronizePlayerPosition',0x3D:'UpdateRecipesBook',  0x3E:'RemoveEntities',
+  0x3F:'RemoveEntityEffect',    0x40:'ResourcePack',           0x41:'Respawn',
+  0x42:'SetHeadRotation',       0x43:'UpdateSectionBlocks',    0x44:'SelectAdvancementsTab',
+  0x45:'ServerData',            0x46:'SetActionBarText',       0x47:'SetBorderCenter',
+  0x48:'SetBorderLerpSize',     0x49:'SetBorderSize',          0x4A:'SetBorderWarningDelay',
+  0x4B:'SetBorderWarningDistance',0x4C:'SetCamera',            0x4D:'SetHeldItem',
+  0x4E:'SetCenterChunk',        0x4F:'SetRenderDistance',      0x50:'SetDefaultSpawnPosition',
+  0x51:'DisplayObjective',      0x52:'SetEntityMetadata',      0x53:'LinkEntities',
+  0x54:'SetEntityVelocity',     0x55:'SetEquipment',           0x56:'SetExperience',
+  0x57:'SetHealth',             0x58:'UpdateObjectives',       0x59:'SetPassengers',
+  0x5A:'UpdateTeams',           0x5B:'UpdateScore',            0x5C:'SetSimulationDistance',
+  0x5D:'SetSubtitleText',       0x5E:'UpdateTime',             0x5F:'SetTitleText',
+  0x60:'SetTitleAnimationTimes',0x61:'EntitySoundEffect',      0x62:'SoundEffect',
+  0x63:'StopSound',             0x64:'SystemChatMessage',      0x65:'SetTabListHeaderAndFooter',
+  0x66:'TagQueryResponse',      0x67:'PickupItem',             0x68:'TeleportEntity',
+  0x69:'UpdateAdvancements',    0x6A:'UpdateAttributes',       0x6B:'FeatureFlags',
+  0x6C:'EntityEffect',          0x6D:'UpdateRecipes',          0x6E:'UpdateTags'
+};
+var C2S = {
+  0x00:'ConfirmTeleportation',  0x01:'QueryBlockEntityTag',    0x02:'ChangeDifficulty',
+  0x03:'MessageAcknowledgment', 0x04:'ChatCommand',            0x05:'ChatMessage',
+  0x06:'PlayerSession',         0x07:'ClientStatus',           0x08:'ClientInformation',
+  0x09:'CommandSuggestionsRequest',0x0A:'ClickContainerButton',0x0B:'ClickContainer',
+  0x0C:'CloseContainer',        0x0D:'PluginMessage',          0x0E:'EditBook',
+  0x0F:'QueryEntityTag',        0x10:'Interact',               0x11:'JigsawGenerate',
+  0x12:'KeepAlive',             0x13:'LockDifficulty',         0x14:'SetPlayerPosition',
+  0x15:'SetPlayerPositionAndRotation',0x16:'SetPlayerRotation',0x17:'SetPlayerOnGround',
+  0x18:'MoveVehicle',           0x19:'PaddleBoat',             0x1A:'PickItem',
+  0x1B:'PlaceRecipe',           0x1C:'PlayerAbilities',        0x1D:'PlayerAction',
+  0x1E:'PlayerCommand',         0x1F:'PlayerInput',            0x20:'Pong',
+  0x21:'ChangeRecipeBookSettings',0x22:'SetSeenRecipe',        0x23:'RenameItem',
+  0x24:'ResourcePackResponse',  0x25:'SeenAdvancements',       0x26:'SelectTrade',
+  0x27:'SetBeaconEffect',       0x28:'SetHeldItem',            0x29:'ProgramCommandBlock',
+  0x2A:'ProgramCommandBlockMinecart',0x2B:'SetCreativeModeSlot',0x2C:'ProgramJigsawBlock',
+  0x2D:'ProgramStructureBlock', 0x2E:'UpdateSign',             0x2F:'SwingArm',
+  0x30:'TeleportToEntity',      0x31:'UseItemOn',              0x32:'UseItem'
+};
+
+function packetName(p) {
+  var parts = [];
+  var outName = p.bytesOut > 0 ? (S2C[p.id] || '') : '';
+  var inName  = p.bytesIn  > 0 ? (C2S[p.id] || '') : '';
+  if (outName) parts.push('\u2191\u00a0' + outName);
+  if (inName)  parts.push('\u2193\u00a0' + inName);
+  if (parts.length === 0) return '<span style="color:#ccc">—</span>';
+  var r = '';
+  for (var i = 0; i < parts.length; i++) { if (i) r += ' / '; r += parts[i]; }
+  return r;
+}
+
+// ── Table builder ─────────────────────────────────────────────────────────────
+var COLS = [
+  { key:'id',       label:'Packet ID',   sort:true  },
+  { key:'name',     label:'Packet Name', sort:false },
+  { key:'bpsOut',   label:'▲ Bps',       sort:true  },
+  { key:'bpsIn',    label:'▼ Bps',       sort:true  },
+  { key:'bytesOut', label:'▲ Total',     sort:true  },
+  { key:'bytesIn',  label:'▼ Total',     sort:true  },
+  { key:'countOut', label:'▲ Count',     sort:true  },
+  { key:'countIn',  label:'▼ Count',     sort:true  }
+];
+
+// srcMap: optional {packetId: sourcesArray} used when packets don't carry their own sources (e.g. player tab)
+function buildTableHtml(packets, srcMap) {
+  if (!packets || packets.length === 0) {
+    return '<div class="empty">No packets captured yet.</div>';
+  }
+  var sorted = packets.slice().sort(function(a, b) {
+    var va = a[S.sort] !== undefined ? a[S.sort] : 0;
+    var vb = b[S.sort] !== undefined ? b[S.sort] : 0;
+    return S.dir === 'asc' ? va - vb : vb - va;
+  });
+  var h = '<table><thead><tr>';
+  COLS.forEach(function(c) {
+    if (!c.sort) {
+      h += '<th>' + c.label + '</th>';
+    } else {
+      var isSorted = S.sort === c.key;
+      var cls = 'sortable' + (isSorted ? ' sorted ' + S.dir : '');
+      h += '<th class="' + cls + '" onclick="setSort(\'' + c.key + '\')">' + c.label + '</th>';
+    }
+  });
+  h += '</tr></thead><tbody>';
+  sorted.forEach(function(p) {
+    var sources = p.sources || (srcMap && srcMap[p.id] ? srcMap[p.id] : null);
+    var hasSrc = sources && sources.length > 0;
+    var isExp  = !!S.expanded[p.id];
+    var arrow  = hasSrc ? '<span class="expand-arrow" id="arr-' + p.id + '">' + (isExp ? '▼' : '▶') + '</span>' : '<span style="display:inline-block;width:14px"></span>';
+    var rowCls = hasSrc ? 'row-expandable' : '';
+    var click  = hasSrc ? ' onclick="toggleExpand(' + p.id + ')"' : '';
+    h += '<tr class="' + rowCls + '"' + click + '>'
+      + '<td class="pid">'       + arrow + fmtHex(p.id)  + '</td>'
+      + '<td class="pname">'     + packetName(p)          + '</td>'
+      + '<td class="val-up">'    + fmtBps(p.bpsOut)       + '</td>'
+      + '<td class="val-down">'  + fmtBps(p.bpsIn)        + '</td>'
+      + '<td>'                   + fmtBytes(p.bytesOut)    + '</td>'
+      + '<td>'                   + fmtBytes(p.bytesIn)     + '</td>'
+      + '<td>'                   + p.countOut               + '</td>'
+      + '<td>'                   + p.countIn                + '</td>'
+      + '</tr>';
+    if (hasSrc) {
+      var total = 0;
+      for (var si = 0; si < sources.length; si++) total += sources[si].count;
+      var srcHtml = '<div class="source-body"><table><thead><tr>'
+        + '<th>Plugin / Category</th><th>Class</th><th>Count</th><th>%</th><th class="src-bar-wrap"></th>'
+        + '</tr></thead><tbody>';
+      for (var si = 0; si < sources.length; si++) {
+        var s = sources[si];
+        var pct = total > 0 ? (s.count / total * 100).toFixed(1) : 0;
+        // Real plugins get a distinct badge; NMS categories stay as-is
+        var catCell = s.plugin
+          ? '<td><span class="src-plugin-badge">' + esc(s.cat) + '</span></td>'
+          : '<td class="src-cat">' + esc(s.cat) + '</td>';
+        srcHtml += '<tr>'
+          + catCell
+          + '<td class="src-cls">' + esc(s.cls) + '</td>'
+          + '<td>' + s.count.toLocaleString() + '</td>'
+          + '<td>' + pct + '%</td>'
+          + '<td class="src-bar-wrap"><div class="src-bar"><div class="src-bar-fill" style="width:' + pct + '%"></div></div></td>'
+          + '</tr>';
+      }
+      srcHtml += '</tbody></table></div>';
+      h += '<tr id="src-' + p.id + '" class="source-row" style="display:' + (isExp ? 'table-row' : 'none') + '">'
+        + '<td colspan="8">' + srcHtml + '</td></tr>';
+    }
+  });
+  return h + '</tbody></table>';
+}
+
+// ── Plugins tab ───────────────────────────────────────────────────────────────
+function setPlugin(name) { S.plugin = name; render(); }
+
+function renderPluginsView(plugins, contentEl) {
+  if (!plugins || plugins.length === 0) {
+    contentEl.innerHTML = '<div class="empty">No plugin-attributed packets yet.<br>'
+      + '<span style="font-size:11px;color:#bbb">Only plugins that use their own packet wrapper classes (e.g. ModelEngine, PacketEvents) can be detected.<br>'
+      + 'Plugins sending raw NMS packets cannot be attributed without bytecode instrumentation.</span></div>';
+    return;
+  }
+  var sorted = plugins.slice().sort(function(a, b) { return b.totalCount - a.totalCount; });
+  // Ensure valid selection
+  var found = false;
+  for (var vi = 0; vi < sorted.length; vi++) { if (sorted[vi].name === S.plugin) { found = true; break; } }
+  if (!found) S.plugin = sorted[0].name;
+
+  // Ensure shell exists (created once, preserved for scroll)
+  var listEl   = contentEl.querySelector('.plugin-list');
+  var detailEl = contentEl.querySelector('.plugin-detail');
+  if (!listEl || !detailEl) {
+    contentEl.innerHTML = '<div class="players-layout">'
+      + '<div class="plugin-list player-list"></div>'
+      + '<div class="plugin-detail player-detail"></div>'
+      + '</div>';
+    listEl   = contentEl.querySelector('.plugin-list');
+    detailEl = contentEl.querySelector('.plugin-detail');
+  }
+
+  // Left: plugin list
+  var leftHtml = '<div class="player-list-header">Plugins</div>';
+  for (var li = 0; li < sorted.length; li++) {
+    var pg = sorted[li];
+    var cls = 'player-item' + (pg.name === S.plugin ? ' active' : '');
+    leftHtml += '<div class="' + cls + '" onclick="setPlugin(\'' + esc(pg.name) + '\')">'
+      + '<div class="pi-name">' + esc(pg.name) + '</div>'
+      + '<div class="pi-bps"><span style="color:#555">' + pg.totalCount.toLocaleString() + ' packets</span></div>'
+      + '</div>';
+  }
+  listEl.innerHTML = leftHtml;
+
+  // Right: packet breakdown for selected plugin
+  var sel = null;
+  for (var ri = 0; ri < sorted.length; ri++) { if (sorted[ri].name === S.plugin) { sel = sorted[ri]; break; } }
+  detailEl.innerHTML = '<div class="player-detail-header">' + esc(S.plugin) + ' — Packet Breakdown</div>'
+    + buildPluginPacketHtml(sel ? sel.packets : [], S.data ? S.data.packets : []);
+}
+
+function buildPluginPacketHtml(packets, globalPackets) {
+  if (!packets || packets.length === 0) return '<div class="empty">No packets for this plugin.</div>';
+  var bpsMap = {};
+  if (globalPackets) {
+    for (var i = 0; i < globalPackets.length; i++) bpsMap[globalPackets[i].id] = globalPackets[i].bpsOut;
+  }
+  var sorted = packets.slice().sort(function(a, b) { return b.count - a.count; });
+  var h = '<table><thead><tr>'
+    + '<th>Packet ID</th><th>Packet Name</th><th>Class</th><th>Count</th><th>Est. ▲ Bps</th>'
+    + '</tr></thead><tbody>';
+  for (var pi = 0; pi < sorted.length; pi++) {
+    var p = sorted[pi];
+    var outName = S2C[p.id] || '';
+    var inName  = C2S[p.id] || '';
+    var nameCell = outName ? esc(outName) : (inName ? esc(inName) : '<span style="color:#ccc">—</span>');
+    h += '<tr>'
+      + '<td class="pid">' + fmtHex(p.id) + '</td>'
+      + '<td class="pname">' + nameCell + '</td>'
+      + '<td class="src-cls" style="white-space:normal;word-break:break-all;max-width:320px">' + esc(p.cls) + '</td>'
+      + '<td>' + p.count.toLocaleString() + '</td>'
+      + '<td class="val-up">' + fmtBps(bpsMap[p.id] || 0) + '</td>'
+      + '</tr>';
+  }
+  return h + '</tbody></table>';
+}
+
+poll();
+</script>
+</body>
+</html>

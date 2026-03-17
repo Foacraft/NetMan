@@ -1,0 +1,19 @@
+name: NetMan
+version: "1.0.0"
+main: com.foacraft.netman.NetManPlugin
+api-version: "1.20"
+description: Network traffic analysis and packet attribution for Paper servers
+authors:
+  - FoaCraft
+
+commands:
+  networkanalyze:
+    description: Network traffic analyzer
+    aliases: [ netanalyze, na ]
+    permission: netman.admin
+    usage: /na <start|stop|status|confirm|cancel>
+
+permissions:
+  netman.admin:
+    description: Full access to NetMan commands
+    default: op
