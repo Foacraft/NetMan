@@ -1,7 +1,6 @@
 package com.foacraft.netman.agent;
 
 import org.objectweb.asm.*;
-import org.objectweb.asm.commons.AdviceAdapter;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
@@ -11,14 +10,13 @@ import java.security.ProtectionDomain;
  * at the end of every constructor in identified NMS packet classes.
  *
  * Injection strategy:
- *   - At each RETURN opcode in a constructor (<init>), insert ALOAD_0 + INVOKESTATIC capture.
- *   - Uses AdviceAdapter for safe insertion (handles try-catch and multiple returns).
+ *   - Intercepts RETURN opcodes in constructors via visitInsn — inserts ALOAD_0 + INVOKESTATIC
+ *     before each RETURN. Does NOT use AdviceAdapter to keep injection minimal and avoid
+ *     altering control flow (which would require COMPUTE_FRAMES and risk classloader deadlock).
  *
  * Target class detection:
  *   - Package prefix: net/minecraft/network/  (Mojang-mapped Paper 1.18+)
  *   - Class name contains PacketPlay           (CraftBukkit/Spigot remapped names on 1.20.1)
- *   This intentionally over-instruments (some non-packet classes may be hit) because the cost
- *   is low (store.put on objects we never query), and under-instrumentation means missed attribution.
  */
 public class PacketClassTransformer implements ClassFileTransformer {
 
@@ -38,8 +36,14 @@ public class PacketClassTransformer implements ClassFileTransformer {
 
         try {
             ClassReader cr = new ClassReader(classfileBuffer);
-            ClassWriter cw = new SafeClassWriter(cr);
-            cr.accept(new PacketClassVisitor(cw, className), ClassReader.EXPAND_FRAMES);
+            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
+                @Override
+                protected String getCommonSuperClass(String type1, String type2) {
+                    // Never call Class.forName — avoids classloader deadlock inside transformers.
+                    return "java/lang/Object";
+                }
+            };
+            cr.accept(new PacketClassVisitor(cw), 0);
             return cw.toByteArray();
         } catch (Throwable t) {
             // Never crash the JVM — silently skip on any ASM error
@@ -52,41 +56,20 @@ public class PacketClassTransformer implements ClassFileTransformer {
                 || className.contains("PacketPlay");
     }
 
-    /**
-     * ClassWriter with COMPUTE_FRAMES that never triggers class loading.
-     * Returns "java/lang/Object" for all type merges — safe because our
-     * injection is trivial (ALOAD_0 + INVOKESTATIC at method exit) and
-     * doesn't introduce new branch merges that need precise types.
-     * This avoids classloader deadlocks that occur when Class.forName is
-     * called inside a ClassFileTransformer (which holds the classloader lock).
-     */
-    private static class SafeClassWriter extends ClassWriter {
-        SafeClassWriter(ClassReader cr) {
-            super(cr, ClassWriter.COMPUTE_FRAMES);
-        }
-
-        @Override
-        protected String getCommonSuperClass(String type1, String type2) {
-            return "java/lang/Object";
-        }
-    }
-
     // ── Class visitor ──────────────────────────────────────────────────────────
 
     private static class PacketClassVisitor extends ClassVisitor {
-        private final String className;
 
-        PacketClassVisitor(ClassVisitor cv, String className) {
+        PacketClassVisitor(ClassVisitor cv) {
             super(Opcodes.ASM9, cv);
-            this.className = className;
         }
 
         @Override
         public MethodVisitor visitMethod(int access, String name, String descriptor,
                                          String signature, String[] exceptions) {
             MethodVisitor mv = super.visitMethod(access, name, descriptor, signature, exceptions);
-            if ("<init>".equals(name)) {
-                return new ConstructorInjector(mv, access, name, descriptor, className);
+            if ("<init>".equals(name) && descriptor.endsWith(")V")) {
+                return new ConstructorInjector(mv);
             }
             return mv;
         }
@@ -94,19 +77,22 @@ public class PacketClassTransformer implements ClassFileTransformer {
 
     // ── Method visitor ─────────────────────────────────────────────────────────
 
-    private static class ConstructorInjector extends AdviceAdapter {
-        private final String owner;
+    /**
+     * Minimal MethodVisitor that intercepts RETURN (0xB1) in constructors and
+     * inserts ALOAD_0 + INVOKESTATIC PacketAttachmentStore.capture before it.
+     * Does not alter control flow — stack map frames from the original class
+     * are passed through unchanged by the ClassReader.
+     */
+    private static class ConstructorInjector extends MethodVisitor {
 
-        ConstructorInjector(MethodVisitor mv, int access, String name, String desc, String owner) {
-            super(Opcodes.ASM9, mv, access, name, desc);
-            this.owner = owner;
+        ConstructorInjector(MethodVisitor mv) {
+            super(Opcodes.ASM9, mv);
         }
 
         @Override
-        protected void onMethodExit(int opcode) {
-            if (opcode != ATHROW) {
-                // Push `this` (arg 0) and call PacketAttachmentStore.capture(Object)
-                loadThis();
+        public void visitInsn(int opcode) {
+            if (opcode == Opcodes.RETURN) {
+                mv.visitVarInsn(Opcodes.ALOAD, 0);
                 mv.visitMethodInsn(
                         Opcodes.INVOKESTATIC,
                         STORE_OWNER,
@@ -114,6 +100,7 @@ public class PacketClassTransformer implements ClassFileTransformer {
                         CAPTURE_DESC,
                         false);
             }
+            super.visitInsn(opcode);
         }
     }
 }
