@@ -17,7 +17,8 @@ tasks.jar {
         attributes(
             "Premain-Class" to "com.foacraft.netman.agent.NetManAgent",
             "Can-Redefine-Classes" to "true",
-            "Can-Retransform-Classes" to "true"
+            "Can-Retransform-Classes" to "true",
+            "Boot-Class-Path" to archiveFileName.get()
         )
     }
     // Bundle ASM into the agent jar (agent is loaded standalone)

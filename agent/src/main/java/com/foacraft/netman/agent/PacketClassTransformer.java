@@ -38,7 +38,7 @@ public class PacketClassTransformer implements ClassFileTransformer {
 
         try {
             ClassReader cr = new ClassReader(classfileBuffer);
-            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+            ClassWriter cw = new LoaderAwareClassWriter(cr, loader);
             cr.accept(new PacketClassVisitor(cw, className), ClassReader.EXPAND_FRAMES);
             return cw.toByteArray();
         } catch (Throwable t) {
@@ -50,6 +50,32 @@ public class PacketClassTransformer implements ClassFileTransformer {
     private boolean isPacketClass(String className) {
         return className.startsWith("net/minecraft/network/")
                 || className.contains("PacketPlay");
+    }
+
+    // ── ClassWriter that resolves types via the correct classloader ──────────
+
+    private static class LoaderAwareClassWriter extends ClassWriter {
+        private final ClassLoader loader;
+
+        LoaderAwareClassWriter(ClassReader cr, ClassLoader loader) {
+            super(cr, ClassWriter.COMPUTE_FRAMES);
+            this.loader = loader != null ? loader : ClassLoader.getSystemClassLoader();
+        }
+
+        @Override
+        protected String getCommonSuperClass(String type1, String type2) {
+            try {
+                Class<?> c1 = Class.forName(type1.replace('/', '.'), false, loader);
+                Class<?> c2 = Class.forName(type2.replace('/', '.'), false, loader);
+                if (c1.isAssignableFrom(c2)) return type1;
+                if (c2.isAssignableFrom(c1)) return type2;
+                if (c1.isInterface() || c2.isInterface()) return "java/lang/Object";
+                do { c1 = c1.getSuperclass(); } while (!c1.isAssignableFrom(c2));
+                return c1.getName().replace('.', '/');
+            } catch (Throwable t) {
+                return "java/lang/Object";
+            }
+        }
     }
 
     // ── Class visitor ──────────────────────────────────────────────────────────

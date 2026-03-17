@@ -127,9 +127,11 @@ object PacketSourceTracker {
 
     private fun resolveClassToPlugin(className: String): String? {
         return try {
-            // Use the context classloader (Netty IO thread) — paper sets this to allow finding plugins
-            val cl = Thread.currentThread().contextClassLoader
-                ?: PacketSourceTracker::class.java.classLoader
+            // Use the plugin classloader first — Paper's shared classloader system lets plugins see
+            // each other's classes. The Netty IO thread's contextClassLoader may be the system
+            // classloader which can't find plugin classes.
+            val cl = PacketSourceTracker::class.java.classLoader
+                ?: Thread.currentThread().contextClassLoader
             val cls = Class.forName(className, false, cl)
             resolvePluginFromApi(cls) ?: run {
                 val loader = cls.classLoader ?: return null

@@ -1,0 +1,25 @@
+{
+  "name": "netman",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Foacraft/NetMan.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Foacraft/NetMan/issues"
+  },
+  "homepage": "https://github.com/Foacraft/NetMan#readme",
+  "devDependencies": {
+    "mineflayer": "^4.35.0",
+    "rcon-client": "^4.2.5"
+  }
+}

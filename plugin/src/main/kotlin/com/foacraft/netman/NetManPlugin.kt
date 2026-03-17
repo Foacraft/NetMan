@@ -283,23 +283,40 @@ class NetManPlugin : JavaPlugin(), Listener {
     private fun getChannel(player: Player): Channel? {
         return try {
             val handle = player.javaClass.getMethod("getHandle").invoke(player)
-            // CraftBukkit/Paper: EntityPlayer.connection → ServerGamePacketListenerImpl
-            // ServerGamePacketListenerImpl.connection → Connection
-            // Connection.channel → Channel
-            val connection1 = getFieldValue(handle, "connection") ?: return null
-            val connection2 = getFieldValue(connection1, "connection") ?: return null
-            getFieldValue(connection2, "channel") as? Channel
+            // Field names are obfuscated in Spigot mappings, so search by type
+            val playerConn = getFieldByType(handle, "net.minecraft.server.network.PlayerConnection")
+                ?: getFieldByType(handle, "net.minecraft.server.network.ServerGamePacketListenerImpl")
+                ?: return null
+            val networkManager = getFieldByType(playerConn, "net.minecraft.network.NetworkManager")
+                ?: getFieldByType(playerConn, "net.minecraft.network.Connection")
+                ?: return null
+            getFieldByType(networkManager, Channel::class.java) as? Channel
         } catch (_: Exception) { null }
     }
 
-    private fun getFieldValue(obj: Any, fieldName: String): Any? {
+    private fun getFieldByType(obj: Any, typeName: String): Any? {
         var cls: Class<*>? = obj.javaClass
         while (cls != null) {
-            try {
-                val f = cls.getDeclaredField(fieldName)
-                f.isAccessible = true
-                return f.get(obj)
-            } catch (_: NoSuchFieldException) {}
+            for (f in cls.declaredFields) {
+                if (f.type.name == typeName) {
+                    f.isAccessible = true
+                    return f.get(obj)
+                }
+            }
+            cls = cls.superclass
+        }
+        return null
+    }
+
+    private fun getFieldByType(obj: Any, type: Class<*>): Any? {
+        var cls: Class<*>? = obj.javaClass
+        while (cls != null) {
+            for (f in cls.declaredFields) {
+                if (type.isAssignableFrom(f.type)) {
+                    f.isAccessible = true
+                    return f.get(obj)
+                }
+            }
             cls = cls.superclass
         }
         return null
