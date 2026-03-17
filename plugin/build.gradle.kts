@@ -34,11 +34,11 @@ bukkit {
     authors = listOf("FoaCraft")
 
     commands {
-        register("networkanalyze") {
+        register("netman") {
             description = "Network traffic analyzer"
-            aliases = listOf("netanalyze", "na")
+            aliases = listOf("nman", "nm")
             permission = "netman.admin"
-            usage = "/na <start|stop|status|confirm|cancel>"
+            usage = "/nm <start|stop|status|confirm|cancel>"
         }
     }
 

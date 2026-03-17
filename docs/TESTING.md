@@ -23,7 +23,7 @@ rcon.password=netman
 ```
 
 - `online-mode=false` — allows the mineflayer bot to connect without Mojang authentication
-- `enable-rcon=true` + `rcon.password=netman` — allows the test script to send console commands (e.g. `/na start`) via RCON
+- `enable-rcon=true` + `rcon.password=netman` — allows the test script to send console commands (e.g. `/nm start`) via RCON
 
 ## Test Plugins
 
@@ -67,7 +67,7 @@ pkill -f "paper.jar")
 
 ## What the Test Does
 
-1. Connects to the server via RCON and runs `/na start` to begin analysis
+1. Connects to the server via RCON and runs `/nm start` to begin analysis
 2. Creates a test hologram via DecentHolograms (`/dh create test_holo`)
 3. Connects a mineflayer bot (`TestBot`) to generate real Netty traffic
 4. The bot moves, jumps, looks around, and sends chat messages for ~5 seconds
@@ -93,7 +93,7 @@ pkill -f "paper.jar")
 |--------------------------|---------------------------------------------------------|
 | DecentHolograms detected | Expected to fail — DH uses Bukkit API, packets originate from NMS Entity Tracker |
 
-7. Cleans up: disconnects bot, deletes test hologram, sends `/na stop`, closes RCON
+7. Cleans up: disconnects bot, deletes test hologram, sends `/nm stop`, closes RCON
 
 ## Expected Output
 

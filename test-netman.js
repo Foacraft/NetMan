@@ -29,8 +29,8 @@ async function main() {
 
   // Start NetMan analysis
   console.log('[Test] Starting NetMan analysis...');
-  const startResult = await rcon.send('na start');
-  console.log('[Test] /na start:', startResult);
+  const startResult = await rcon.send('nm start');
+  console.log('[Test] /nm start:', startResult);
   await sleep(2000);
 
   // Connect bot
@@ -175,7 +175,7 @@ async function main() {
   // Cleanup
   bot.quit();
   await rcon.send('dh delete test_holo');
-  await rcon.send('na stop');
+  await rcon.send('nm stop');
   rcon.end();
   await sleep(1000);
   process.exit(allPass ? 0 : 1);

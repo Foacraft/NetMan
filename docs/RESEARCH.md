@@ -173,7 +173,7 @@ NetMan/
    ```
    java -javaagent:/path/to/netman-agent.jar -jar paper.jar
    ```
-5. In-game: `/na start [port]` (default 12345), then visit `http://<server-ip>:<port>`
+5. In-game: `/nm start [port]` (default 12345), then visit `http://<server-ip>:<port>`
 
 ### Without the agent
 

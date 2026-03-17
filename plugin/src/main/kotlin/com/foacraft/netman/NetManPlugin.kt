@@ -35,7 +35,7 @@ class NetManPlugin : JavaPlugin(), Listener {
     override fun onEnable() {
         server.pluginManager.registerEvents(this, this)
 
-        val cmd = getCommand("networkanalyze") ?: return
+        val cmd = getCommand("netman") ?: return
         val handler = object : org.bukkit.command.CommandExecutor {
             override fun onCommand(
                 sender: org.bukkit.command.CommandSender,
@@ -131,9 +131,9 @@ class NetManPlugin : JavaPlugin(), Listener {
                 if (ws != null)
                     sender.sendMessage("§a[NetMan] §fRunning on port §e${ws.port}§f, monitoring §e${collector.onlinePlayers.size}§f player(s)")
                 else
-                    sender.sendMessage("§7[NetMan] Not running. Use §f/na start [port]§7 to start.")
+                    sender.sendMessage("§7[NetMan] Not running. Use §f/nm start [port]§7 to start.")
             }
-            else -> sender.sendMessage("§7Usage: /na <start|stop|status|confirm|cancel>")
+            else -> sender.sendMessage("§7Usage: /nm <start|stop|status|confirm|cancel>")
         }
     }
 
@@ -177,7 +177,7 @@ class NetManPlugin : JavaPlugin(), Listener {
         if (isNetManServer(port)) {
             pendingStart = Pair(port, sender)
             sender.sendMessage("§e[NetMan] §fPort §e$port §fis in use by another NetMan instance.")
-            sender.sendMessage("§eType §f/na confirm §eto take over, §f/na cancel §eto abort.")
+            sender.sendMessage("§eType §f/nm confirm §eto take over, §f/nm cancel §eto abort.")
         } else {
             sender.sendMessage("§c[NetMan] Port §e$port §cis in use by another process. Choose a different port.")
         }
