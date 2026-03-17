@@ -38,7 +38,7 @@ public class PacketClassTransformer implements ClassFileTransformer {
 
         try {
             ClassReader cr = new ClassReader(classfileBuffer);
-            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS);
+            ClassWriter cw = new SafeClassWriter(cr);
             cr.accept(new PacketClassVisitor(cw, className), ClassReader.EXPAND_FRAMES);
             return cw.toByteArray();
         } catch (Throwable t) {
@@ -50,6 +50,25 @@ public class PacketClassTransformer implements ClassFileTransformer {
     private boolean isPacketClass(String className) {
         return className.startsWith("net/minecraft/network/")
                 || className.contains("PacketPlay");
+    }
+
+    /**
+     * ClassWriter with COMPUTE_FRAMES that never triggers class loading.
+     * Returns "java/lang/Object" for all type merges — safe because our
+     * injection is trivial (ALOAD_0 + INVOKESTATIC at method exit) and
+     * doesn't introduce new branch merges that need precise types.
+     * This avoids classloader deadlocks that occur when Class.forName is
+     * called inside a ClassFileTransformer (which holds the classloader lock).
+     */
+    private static class SafeClassWriter extends ClassWriter {
+        SafeClassWriter(ClassReader cr) {
+            super(cr, ClassWriter.COMPUTE_FRAMES);
+        }
+
+        @Override
+        protected String getCommonSuperClass(String type1, String type2) {
+            return "java/lang/Object";
+        }
     }
 
     // ── Class visitor ──────────────────────────────────────────────────────────
