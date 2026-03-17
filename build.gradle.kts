@@ -21,8 +21,20 @@ tasks.register<Copy>("copyArtifacts") {
         rename { "netman-agent-${project.version}.jar" }
     }
     into(layout.buildDirectory)
+
+    // Always copy, skip UP-TO-DATE check
+    outputs.upToDateWhen { false }
 }
 
 tasks.register("build") {
     dependsOn("copyArtifacts")
+}
+
+// Also copy artifacts when submodules build
+subprojects {
+    tasks.configureEach {
+        if (name == "build") {
+            finalizedBy(rootProject.tasks.named("copyArtifacts"))
+        }
+    }
 }
