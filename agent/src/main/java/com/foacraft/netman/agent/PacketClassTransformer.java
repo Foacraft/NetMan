@@ -4,25 +4,36 @@ import org.objectweb.asm.*;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+import java.util.Set;
 
 /**
  * ASM ClassFileTransformer that injects a call to {@link PacketAttachmentStore#capture(Object)}
  * at the end of every constructor in identified NMS packet classes.
  *
- * Injection strategy:
- *   - Intercepts RETURN opcodes in constructors via visitInsn — inserts ALOAD_0 + INVOKESTATIC
- *     before each RETURN. Does NOT use AdviceAdapter to keep injection minimal and avoid
- *     altering control flow (which would require COMPUTE_FRAMES and risk classloader deadlock).
- *
- * Target class detection:
- *   - Package prefix: net/minecraft/network/  (Mojang-mapped Paper 1.18+)
- *   - Class name contains PacketPlay           (CraftBukkit/Spigot remapped names on 1.20.1)
+ * Only transforms classes that directly implement/extend the Packet interface
+ * (detected via bytecode scanning, no class loading). This prevents transforming
+ * unrelated classes in the network package (Connection, chat components, inner
+ * classes like PacketPlayOutBoss$g, etc.) which caused VerifyErrors and deadlocks.
  */
 public class PacketClassTransformer implements ClassFileTransformer {
 
     private static final String STORE_OWNER =
             "com/foacraft/netman/agent/PacketAttachmentStore";
     private static final String CAPTURE_DESC = "(Ljava/lang/Object;)V";
+
+    /** Known Packet interface names (internal format) across server versions. */
+    private static final Set<String> PACKET_INTERFACE_NAMES = Set.of(
+            // Mojang-mapped (Paper 1.17+)
+            "net/minecraft/network/protocol/Packet",
+            // CraftBukkit/Spigot obfuscated (1.12–1.20.x)
+            "net/minecraft/server/v1_20_R1/Packet",
+            "net/minecraft/server/v1_19_R3/Packet",
+            "net/minecraft/server/v1_19_R2/Packet",
+            "net/minecraft/server/v1_19_R1/Packet",
+            "net/minecraft/server/v1_18_R2/Packet",
+            "net/minecraft/server/v1_18_R1/Packet",
+            "net/minecraft/server/v1_17_R1/Packet"
+    );
 
     @Override
     public byte[] transform(
@@ -32,28 +43,50 @@ public class PacketClassTransformer implements ClassFileTransformer {
             ProtectionDomain protectionDomain,
             byte[] classfileBuffer) {
 
-        if (className == null || !isPacketClass(className)) return null;
+        if (className == null) return null;
+
+        // Quick prefix check to avoid scanning every class
+        if (!className.startsWith("net/minecraft/network/")
+                && !className.contains("PacketPlay")) {
+            return null;
+        }
 
         try {
-            ClassReader cr = new ClassReader(classfileBuffer);
-            ClassWriter cw = new ClassWriter(cr, ClassWriter.COMPUTE_FRAMES) {
+            // Scan bytecode to check if this class implements Packet interface
+            ClassReader scanner = new ClassReader(classfileBuffer);
+            if (!isPacketClass(scanner)) return null;
+
+            ClassWriter cw = new ClassWriter(scanner, ClassWriter.COMPUTE_FRAMES) {
                 @Override
                 protected String getCommonSuperClass(String type1, String type2) {
-                    // Never call Class.forName — avoids classloader deadlock inside transformers.
                     return "java/lang/Object";
                 }
             };
-            cr.accept(new PacketClassVisitor(cw), 0);
+            scanner.accept(new PacketClassVisitor(cw), 0);
             return cw.toByteArray();
         } catch (Throwable t) {
-            // Never crash the JVM — silently skip on any ASM error
             return null;
         }
     }
 
-    private boolean isPacketClass(String className) {
-        return className.startsWith("net/minecraft/network/")
-                || className.contains("PacketPlay");
+    /**
+     * Checks if a class implements the Packet interface by reading its
+     * superName and interfaces from bytecode — no class loading involved.
+     */
+    private boolean isPacketClass(ClassReader cr) {
+        String superName = cr.getSuperName();
+        if (superName != null && PACKET_INTERFACE_NAMES.contains(superName)) {
+            return true;
+        }
+        String[] interfaces = cr.getInterfaces();
+        if (interfaces != null) {
+            for (String iface : interfaces) {
+                if (PACKET_INTERFACE_NAMES.contains(iface)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     // ── Class visitor ──────────────────────────────────────────────────────────
@@ -77,12 +110,6 @@ public class PacketClassTransformer implements ClassFileTransformer {
 
     // ── Method visitor ─────────────────────────────────────────────────────────
 
-    /**
-     * Minimal MethodVisitor that intercepts RETURN (0xB1) in constructors and
-     * inserts ALOAD_0 + INVOKESTATIC PacketAttachmentStore.capture before it.
-     * Does not alter control flow — stack map frames from the original class
-     * are passed through unchanged by the ClassReader.
-     */
     private static class ConstructorInjector extends MethodVisitor {
 
         ConstructorInjector(MethodVisitor mv) {
