@@ -4,6 +4,8 @@ Real-time network traffic analysis and packet attribution for Paper servers.
 
 > **Only supports Paper 1.20.1**
 
+![NetMan Dashboard](docs/images/screenshot.png)
+
 ## Setup
 
 1. Build:

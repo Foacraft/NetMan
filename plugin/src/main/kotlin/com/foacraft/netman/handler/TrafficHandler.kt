@@ -38,7 +38,7 @@ class TrafficHandler(
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
         try {
-            if (msg is ByteBuf && msg.isReadable) {
+            if (msg is ByteBuf && msg.refCnt() > 0 && msg.isReadable) {
                 val result = peekVarInt(msg, msg.readerIndex())
                 if (result != null) collector.recordIn(playerName, result.first, msg.readableBytes())
             }
@@ -48,7 +48,7 @@ class TrafficHandler(
 
     override fun write(ctx: ChannelHandlerContext, msg: Any, promise: ChannelPromise) {
         try {
-            if (msg is ByteBuf && msg.isReadable) {
+            if (msg is ByteBuf && msg.refCnt() > 0 && msg.isReadable) {
                 val lenResult = peekVarInt(msg, msg.readerIndex())
                 if (lenResult != null) {
                     val idResult = peekVarInt(msg, msg.readerIndex() + lenResult.second)
