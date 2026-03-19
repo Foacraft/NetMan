@@ -1,39 +1,26 @@
 # NetMan
 
-Real-time network traffic analysis and packet attribution for Paper servers.
+Real-time network packet analysis for Paper servers. You probably need this.
 
-> **Only supports Paper 1.20.1**
+> Paper 1.20.1 only. No, we won't support your version.
 
 ![NetMan Dashboard](docs/images/screenshot.png)
 
 ## Setup
 
-1. Build:
-   ```bash
-   ./gradlew build
-   ```
+```
+./gradlew build
+java -javaagent:netman-agent-1.0.0.jar -jar paper.jar
+```
 
-2. 构建产物位于 `build/` 目录：`netman-<version>.jar`（插件）和 `netman-agent-<version>.jar`（Agent）。
-
-3. 将 `netman-agent-<version>.jar` 放在服务器目录，`netman-<version>.jar` 放入 `plugins/`。
-
-4. 启动服务器：
-   ```
-   java -javaagent:netman-agent-1.0.0.jar -jar paper.jar
-   ```
+You'll figure out where the jars go.
 
 ## Usage
 
 ```
-/nm start [port]    Start analysis (default port: 12345)
-/nm stop            Stop analysis
-/nm status          Show current status
+/nm start [port]
+/nm stop
+/nm status
 ```
 
-Aliases: `/netman`, `/nman`, `/nm`
-
-Open `http://<server-ip>:<port>` in a browser to view the live dashboard.
-
-## Without the Agent
-
-The plugin works without `-javaagent`, but plugin attribution will only detect plugins that use custom packet wrapper classes. NMS category labelling always works.
+Dashboard at `http://<server-ip>:<port>`. Default port `12345`.
